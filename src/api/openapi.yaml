@@ -1,0 +1,672 @@
+openapi: 3.0.0
+info:
+  description: Backend API for the Meiern game.
+  title: Meiern API
+  version: 1.0.0
+servers:
+- url: https://sinv-56045.edu.hsr.ch/api
+tags:
+- description: User operations
+  name: User
+- description: Lobby management
+  name: Lobby
+- description: Game actions
+  name: Game
+paths:
+  /user/register:
+    post:
+      description: Register a new user with username & password
+      operationId: registerUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+          description: Successful login (should check `/user/status`)
+          headers:
+            Set-Cookie:
+              explode: false
+              schema:
+                example: AuthToken=a11f58b5ec79b6c5143380e352bd1c781a43e0de9b408d6e2fb0470d06a9717ca8392c9666432a8ea7344a2d7b6ae1380fce535469ba61b9bfa725ef3d252141;
+                  Path=/api; HttpOnly
+                type: string
+              style: simple
+        "403":
+          description: Username is already taken
+      summary: Register new user
+      tags:
+      - User
+      x-openapi-router-controller: UserController
+      x-openapi-router-service: UserService
+  /user/login:
+    post:
+      description: Log in with usernamd & password
+      operationId: logUserIn
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+          description: Successful login (should check `/user/status`)
+          headers:
+            Set-Cookie:
+              explode: false
+              schema:
+                example: AuthToken=a11f58b5ec79b6c5143380e352bd1c781a43e0de9b408d6e2fb0470d06a9717ca8392c9666432a8ea7344a2d7b6ae1380fce535469ba61b9bfa725ef3d252141;
+                  Path=/api; HttpOnly
+                type: string
+              style: simple
+        "401":
+          description: Invalid credentials
+      summary: Log user in
+      tags:
+      - User
+      x-openapi-router-controller: UserController
+      x-openapi-router-service: UserService
+  /user/logout:
+    post:
+      description: Log the current user out
+      operationId: logUserOut
+      responses:
+        "200":
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+      security:
+      - AuthToken: []
+      summary: Log user out
+      tags:
+      - User
+      x-openapi-router-controller: UserController
+      x-openapi-router-service: UserService
+  /user/status:
+    get:
+      description: Get the status (i.e. location) of the currently logged in user
+      operationId: getUserStatus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+      security:
+      - AuthToken: []
+      summary: Get user status
+      tags:
+      - User
+      x-openapi-router-controller: UserController
+      x-openapi-router-service: UserService
+  /lobbies:
+    get:
+      description: Get list of all open lobbies
+      operationId: getLobbies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/inline_response_200_2'
+                type: array
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+      security:
+      - AuthToken: []
+      summary: Get list of lobbies
+      tags:
+      - Lobby
+      x-openapi-router-controller: LobbyController
+      x-openapi-router-service: LobbyService
+  /lobby/create:
+    post:
+      description: Create a new lobby
+      operationId: createLobby
+      requestBody:
+        $ref: '#/components/requestBodies/inline_object'
+        content:
+          application/json:
+            schema:
+              properties:
+                name:
+                  description: The display name of the new lobby
+                  example: Awesome Lobby
+                  type: string
+                maxplayers:
+                  description: The maximum number of players that can join this lobby
+                  example: 15
+                  type: integer
+                numlives:
+                  description: The amount of times a user can get a game penalty before
+                    they lose
+                  example: 8
+                  type: integer
+              required:
+              - maxplayers
+              - name
+              - numlives
+              type: object
+        required: true
+      responses:
+        "200":
+          description: Success (should start polling `/lobby/status`)
+        "401":
+          description: AuthToken token is missing or invalid
+        "403":
+          description: Lobby by that name exists already
+      security:
+      - AuthToken: []
+      summary: Create lobby
+      tags:
+      - Lobby
+      x-openapi-router-controller: LobbyController
+      x-openapi-router-service: LobbyService
+  /lobby/join:
+    post:
+      description: Join a lobby
+      operationId: joinLobby
+      requestBody:
+        $ref: '#/components/requestBodies/inline_object_1'
+        content:
+          application/json:
+            schema:
+              properties:
+                lobbyid:
+                  example: 456
+                  type: integer
+              required:
+              - lobbyid
+              type: object
+        required: true
+      responses:
+        "200":
+          description: Success (should start polling `/lobby/status`)
+        "400":
+          description: User status is not `loggedin`
+        "401":
+          description: AuthToken token is missing or invalid
+        "403":
+          description: Maximum number of players reached
+        "404":
+          description: No lobby with `lobbyid` exists
+      security:
+      - AuthToken: []
+      summary: Join lobby
+      tags:
+      - Lobby
+      x-openapi-router-controller: LobbyController
+      x-openapi-router-service: LobbyService
+  /lobby/status:
+    get:
+      description: Get all information on the current lobby. This should be polled
+        until a non-200 status code is received, at which point `/user/status` should
+        be queried to determine whether a game was started or the lobby was destroyed.
+      operationId: getLobbyStatus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `inlobby`
+      security:
+      - AuthToken: []
+      summary: Get lobby status
+      tags:
+      - Lobby
+      x-openapi-router-controller: LobbyController
+      x-openapi-router-service: LobbyService
+  /lobby/leave:
+    post:
+      description: Leave the current lobby. If the current user is the owner, this
+        destroys the lobby.
+      operationId: leaveLobby
+      responses:
+        "200":
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `inlobby`
+      security:
+      - AuthToken: []
+      summary: Leave lobby
+      tags:
+      - Lobby
+      x-openapi-router-controller: LobbyController
+      x-openapi-router-service: LobbyService
+  /lobby/start:
+    post:
+      description: Start a game from the current lobby. Only the owner of the lobby
+        may do this.
+      operationId: startLobby
+      responses:
+        "200":
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+        "403":
+          description: User is not the lobby owner
+        "404":
+          description: User status is not `inlobby`
+      security:
+      - AuthToken: []
+      summary: Start game from lobby
+      tags:
+      - Lobby
+      x-openapi-router-controller: LobbyController
+      x-openapi-router-service: LobbyService
+  /game/status:
+    get:
+      description: Get all information on the current game. This should be polled
+        until one player has won the game. Once the game is over, it still has to
+        be left explicitly by posting to `/game/leave`.
+      operationId: getGameStatus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/inline_response_200_4'
+                type: array
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `ingame`
+      security:
+      - AuthToken: []
+      summary: Get game status
+      tags:
+      - Game
+      x-openapi-router-controller: GameController
+      x-openapi-router-service: GameService
+  /game/call:
+    post:
+      description: Try to call the previous player's bluff
+      operationId: gameCallBluff
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_5'
+          description: Success
+        "400":
+          description: Action may currently not be performed
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `ingame`
+      security:
+      - AuthToken: []
+      summary: Call bluff
+      tags:
+      - Game
+      x-openapi-router-controller: GameController
+      x-openapi-router-service: GameService
+  /game/roll:
+    post:
+      description: Roll the dice and believe the previous player's claimed score.
+        Multiple request to this endpoint are allowed, but will return the same dice
+        result as the first request of the turn.
+      operationId: gameRoll
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_6'
+          description: Success
+        "400":
+          description: Action may currently not be performed
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `ingame`
+      security:
+      - AuthToken: []
+      summary: Roll the dice
+      tags:
+      - Game
+      x-openapi-router-controller: GameController
+      x-openapi-router-service: GameService
+  /game/passon:
+    post:
+      description: End your turn by passing on the dice and claiming a score.
+      operationId: gamePassOn
+      requestBody:
+        $ref: '#/components/requestBodies/inline_object_2'
+        content:
+          application/json:
+            schema:
+              properties:
+                blind:
+                  description: Whether or not to blindly roll the dice before passing
+                    on. If this is `true`, `claimedscore` is ignored, the server generates
+                    a new actual dice score that is not revealed to the user, and
+                    the claimed score is set to one higher than the previous player's
+                    score.
+                  example: false
+                  type: boolean
+                claimedscore:
+                  description: The claimed dice score.
+                  example: 21
+                  type: integer
+              required:
+              - blind
+              - claimedscore
+              type: object
+        required: true
+      responses:
+        "200":
+          description: Success
+        "400":
+          description: Action may currently not be performed
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `ingame`
+        "422":
+          description: Claimed score is not allowed
+      security:
+      - AuthToken: []
+      summary: End your turn
+      tags:
+      - Game
+      x-openapi-router-controller: GameController
+      x-openapi-router-service: GameService
+  /game/leave:
+    post:
+      description: Leave the current game. This may be performed either mid-game (setting
+        the player state to `dead`), or after a game has ended. If possible, this
+        will move the user back to the lobby the game was started from. If the lobby
+        is either full or has been destroyed though, they will be set back to `loggedin`.
+        `/user/status` should be queried to determine which of these has happened.
+      operationId: leaveGame
+      responses:
+        "200":
+          description: Success
+        "401":
+          description: AuthToken token is missing or invalid
+        "404":
+          description: User status is not `ingame`
+      security:
+      - AuthToken: []
+      summary: Leave the game
+      tags:
+      - Game
+      x-openapi-router-controller: GameController
+      x-openapi-router-service: GameService
+components:
+  requestBodies:
+    inline_object_1:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_object_1'
+      required: true
+    inline_object:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_object'
+      required: true
+    inline_object_2:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_object_2'
+      required: true
+  responses:
+    LoginResult:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_200'
+      description: Successful login (should check `/user/status`)
+      headers:
+        Set-Cookie:
+          explode: false
+          schema:
+            example: AuthToken=a11f58b5ec79b6c5143380e352bd1c781a43e0de9b408d6e2fb0470d06a9717ca8392c9666432a8ea7344a2d7b6ae1380fce535469ba61b9bfa725ef3d252141;
+              Path=/api; HttpOnly
+            type: string
+          style: simple
+    UnauthorizedError:
+      description: AuthToken token is missing or invalid
+  schemas:
+    Credentials:
+      example:
+        password: covfefe
+        username: Tronald Dump
+      properties:
+        username:
+          example: Tronald Dump
+          type: string
+        password:
+          example: covfefe
+          type: string
+      required:
+      - password
+      - username
+      type: object
+    inline_response_200:
+      example:
+        id: 123
+      properties:
+        id:
+          description: The ID of the created/logged-in user
+          example: 123
+          type: integer
+    inline_response_200_1:
+      example:
+        status: loggedin
+      properties:
+        status:
+          enum:
+          - loggedin
+          - inlobby
+          - ingame
+          type: string
+    inline_response_200_2:
+      example:
+        players: 3
+        name: Awesome Lobby
+        id: 456
+        maxplayers: 15
+      properties:
+        id:
+          description: The lobby ID, to be used with `/lobby/join`
+          example: 456
+          type: integer
+        name:
+          description: The name of the lobby, for displaying purposes
+          example: Awesome Lobby
+          type: string
+        players:
+          description: The current number of players in the lobby
+          example: 3
+          type: integer
+        maxplayers:
+          description: The maximum number of players that can be in this lobby
+          example: 15
+          type: integer
+    inline_object:
+      properties:
+        name:
+          description: The display name of the new lobby
+          example: Awesome Lobby
+          type: string
+        maxplayers:
+          description: The maximum number of players that can join this lobby
+          example: 15
+          type: integer
+        numlives:
+          description: The amount of times a user can get a game penalty before they
+            lose
+          example: 8
+          type: integer
+      required:
+      - maxplayers
+      - name
+      - numlives
+      type: object
+    inline_object_1:
+      properties:
+        lobbyid:
+          example: 456
+          type: integer
+      required:
+      - lobbyid
+      type: object
+    inline_response_200_3_players:
+      example:
+        name: Baba
+        id: 42
+      properties:
+        id:
+          description: The user ID
+          example: 42
+          type: integer
+        name:
+          description: The username
+          example: Baba
+          type: string
+    inline_response_200_3:
+      example:
+        players:
+        - name: Baba
+          id: 42
+        - name: Baba
+          id: 42
+        name: Awesome Lobby
+        maxplayers: 15
+        ownerid: 42
+        numlives: 8
+      properties:
+        name:
+          description: The lobby name
+          example: Awesome Lobby
+          type: string
+        ownerid:
+          description: ID of the owner who owns this room. Only that user can start
+            a game, and the lobby is destroyed when this user leaves.
+          example: 42
+          type: integer
+        players:
+          items:
+            $ref: '#/components/schemas/inline_response_200_3_players'
+          type: array
+        maxplayers:
+          description: The maximum number of players that can be in this lobby
+          example: 15
+          type: integer
+        numlives:
+          description: The amount of times a user can get a game penalty before they
+            lose
+          example: 8
+          type: integer
+    inline_response_200_4:
+      example:
+        lives: 2
+        claimedscore: 21
+        name: Baba
+        id: 42
+        state: current
+      properties:
+        id:
+          description: The user ID. This should be used to determine whether the current
+            user is doing their turn.
+          example: 42
+          type: integer
+        name:
+          description: The username
+          example: Baba
+          type: string
+        lives:
+          description: The amount of lives left
+          example: 2
+          type: integer
+        state:
+          description: |
+            The current player state.
+
+            - `current` = currently doing their turn.
+            - `waiting` = waiting for another player to end their turn.
+            - `previous` = equivalent to `waiting`, and indicates that the previous move was made by this player.
+            - `dead` = the player has lost all lives or got disconnected for too long.
+            - `won` = the player was the last to survive and won the game.
+          enum:
+          - current
+          - waiting
+          - previous
+          - dead
+          - won
+          type: string
+        claimedscore:
+          description: The claimed score of the last round
+          example: 21
+          type: integer
+    inline_response_200_5:
+      example:
+        actualscore: 32
+        bluffed: true
+      properties:
+        bluffed:
+          example: true
+          type: boolean
+        actualscore:
+          example: 32
+          type: integer
+    inline_response_200_6:
+      example:
+        score: 42
+      properties:
+        score:
+          example: 42
+          type: integer
+    inline_object_2:
+      properties:
+        blind:
+          description: Whether or not to blindly roll the dice before passing on.
+            If this is `true`, `claimedscore` is ignored, the server generates a new
+            actual dice score that is not revealed to the user, and the claimed score
+            is set to one higher than the previous player's score.
+          example: false
+          type: boolean
+        claimedscore:
+          description: The claimed dice score.
+          example: 21
+          type: integer
+      required:
+      - blind
+      - claimedscore
+      type: object
+  securitySchemes:
+    AuthToken:
+      in: cookie
+      name: AuthToken
+      type: apiKey
